@@ -1,26 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '../../lib/supabase';
+import { obtenerColaYDistribucion, buildConsolidado } from '../../lib/cola';
 
 const WA_SERVICE_URL = process.env.WA_SERVICE_URL || 'https://wa-service-g048.onrender.com';
-
-function buildMensaje(movilizador: string, pendientes: any[]): string {
-  const lineas = pendientes.map((v, i) => {
-    const fecha = v.fecha_planificacion
-      ? new Date(v.fecha_planificacion + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      : 'Sin fecha';
-    const atraso = v.dias_atraso > 0 ? ` | ⚠️ ${v.dias_atraso}d atraso` : '';
-    return `${i + 1}. VIN: *${v.vin}* | ${v.marca} ${v.modelo} | Ubic: ${v.ubicacion_gps || 'sin GPS'} | Plan: ${fecha}${atraso}`;
-  });
-
-  return [
-    `🚗 *Alerta Movilizador – Área de Pintura*`,
-    `Hola *${movilizador}*, tienes *${pendientes.length}* carro(s) sin pintor asignado:`,
-    '',
-    ...lineas,
-    '',
-    `⏰ Por favor confirma a qué pintor le dejaste cada uno.`,
-  ].join('\n');
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -33,22 +15,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const today = fecha || new Date().toISOString().split('T')[0];
 
-  // Obtener trips pendientes (sin pintor asignado) del movilizador
+  // Obtener trips de hoy del movilizador para saber entregados vs pendientes de asignar
   const { data: trips, error } = await supabase
     .from('movilizador_trips')
     .select('*')
     .eq('fecha', today)
-    .eq('movilizador_name', movilizador_name)
-    .is('pintor_asignado', null)
-    .order('dias_atraso', { ascending: false });
+    .eq('movilizador_name', movilizador_name);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  if (!trips || trips.length === 0) {
-    return res.status(200).json({ ok: true, enviado: false, mensaje: 'No hay pendientes' });
-  }
+  const entregados = (trips || []).filter(t => t.pintor_asignado && t.pintor_asignado.trim() !== '').length;
+  const pendientesAsignar = (trips || []).length - entregados;
 
-  const mensaje = buildMensaje(movilizador_name, trips);
+  // Obtener cola actual
+  const { distribucion } = await obtenerColaYDistribucion(today);
+  const colaBuscador = (distribucion as Record<string, any[]>)[String(movilizador_name)] || [];
+
+  const mensaje = buildConsolidado(movilizador_name, entregados, pendientesAsignar, colaBuscador);
 
   // Enviar via wa-service
   try {
@@ -72,17 +55,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Error del wa-service', detalle: waData });
     }
 
-    // Marcar trips como alertados
-    const ids = trips.map((t: any) => t.id);
-    await supabase
-      .from('movilizador_trips')
-      .update({ alerta_enviada: true, updated_at: new Date().toISOString() })
-      .in('id', ids);
+    // Marcar trips pendientes como alertados si los hay
+    const tripsPendientes = (trips || []).filter(t => !t.pintor_asignado || t.pintor_asignado.trim() === '');
+    if (tripsPendientes.length > 0) {
+      const ids = tripsPendientes.map((t: any) => t.id);
+      await supabase
+        .from('movilizador_trips')
+        .update({ alerta_enviada: true, updated_at: new Date().toISOString() })
+        .in('id', ids);
+    }
 
     return res.status(200).json({
       ok: true,
       enviado: true,
-      pendientes: trips.length,
+      pendientes: pendientesAsignar,
+      cola: colaBuscador.length,
       movilizador: movilizador_name,
       waResponse: waData,
     });

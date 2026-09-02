@@ -43,7 +43,8 @@ export async function readSheet(spreadsheetId: string, range: string): Promise<s
     
     return (response.data.values as string[][]) || [];
   } catch (error) {
-    console.error(`Error reading sheet ${spreadsheetId} range ${range}:`, error);
+    console.error(`[DEBUG] Error reading sheet ${spreadsheetId} range ${range}:`);
+    console.error(error);
     return [];
   }
 }

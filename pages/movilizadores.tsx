@@ -120,6 +120,9 @@ export default function Movilizadores() {
     try {
       const r = await fetch('/api/seguimiento');
       const d = await r.json();
+      if (d.error_debug) {
+        addToast('error', d.error_debug);
+      }
       setCola(d.vehiculos || []);
       setDistrib(d.distribucion || {});
     } catch { addToast('error', 'Error cargando cola de seguimiento'); }
@@ -462,16 +465,14 @@ export default function Movilizadores() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        {pendientes.length > 0 && (
                           <button
                             id={`btn-wa-${buscador.movilizador_name}`}
                             className="btn"
                             style={{ background: '#25D366', color: '#fff', fontSize: '0.75rem', padding: '5px 10px' }}
                             onClick={() => enviarWA(buscador)}
                           >
-                            📲 WA ({pendientes.length} pend.)
+                            📲 Enviar WA (Resumen)
                           </button>
-                        )}
                       </div>
                     </div>
 
