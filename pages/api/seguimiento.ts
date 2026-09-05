@@ -6,7 +6,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const today = new Date().toISOString().split('T')[0];
-    const { vehiculos, distribucion, buscadores, error } = await obtenerColaYDistribucion(today);
+    const fecha = (req.query.fecha as string) || today;
+    const { vehiculos, distribucion, buscadores, error } = await obtenerColaYDistribucion(fecha);
     
     if (error) {
       return res.status(200).json({ vehiculos: [], distribucion: {}, error_debug: error });

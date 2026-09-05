@@ -192,7 +192,8 @@ export default function Movilizadores() {
   const cargarCola = useCallback(async () => {
     setLoadingCola(true);
     try {
-      const r = await fetch('/api/seguimiento');
+      const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+      const r = await fetch(`/api/seguimiento?fecha=${todayLocal}`);
       if (!r.ok) throw new Error('Network response was not ok');
       const d = await r.json();
       if (d.error_debug) addToast('error', d.error_debug);
