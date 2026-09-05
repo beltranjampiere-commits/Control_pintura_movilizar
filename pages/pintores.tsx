@@ -30,6 +30,7 @@ const PINTORES_CONFIG: { nombre: string; rol: string; color: string; emoji: stri
   { nombre: 'Rudy',           rol: 'pintor',     color: '#06b6d4', emoji: '🎨' },
   { nombre: 'César',          rol: 'pintor',     color: '#0891b2', emoji: '🎨' },
   { nombre: 'Andy',           rol: 'pintor',     color: '#0284c7', emoji: '🎨' },
+  { nombre: 'Sunción',        rol: 'pintor',     color: '#f43f5e', emoji: '🎨' },
 ];
 
 function fmtHora(iso: string | null): string {

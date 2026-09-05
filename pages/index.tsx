@@ -29,7 +29,7 @@ interface Toast { id: number; type: 'success'|'error'|'info'; msg: string; }
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────
 const TECNICOS = {
-  pintores: ['Yader', 'Luis Hernandez', 'Fernando', 'Rudy', 'César', 'Andy'],
+  pintores: ['Yader', 'Luis Hernandez', 'Fernando', 'Rudy', 'César', 'Andy', 'Sunción'],
   desabolladores: ['Casius', 'Proveedor externo', 'Juan Carlos'],
   pulidores: ['Jairo', 'Daniel', 'Vicente'],
   movilizadores: ['Paul', 'Santos', 'Marcos'],

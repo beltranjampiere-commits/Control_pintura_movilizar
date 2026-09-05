@@ -47,7 +47,7 @@ interface VehSeguimiento {
 }
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────
-const PINTORES = ['Yader', 'Luis Hernandez', 'Fernando (Planchador)', 'Rudy', 'César', 'Andy'];
+const PINTORES = ['Yader', 'Luis Hernandez', 'Fernando (Planchador)', 'Rudy', 'César', 'Andy', 'Sunción'];
 const MOVILIZADORES_DEFAULT: MovilConfig[] = [
   { movilizador_name: 'Paul',   telefono: '51928358170', rol: 'buscador' },
   { movilizador_name: 'Santos', telefono: '51937550237', rol: 'buscador' },
