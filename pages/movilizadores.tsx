@@ -166,7 +166,8 @@ export default function Movilizadores() {
   const cargarTodo = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/movilizadores');
+      const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+      const r = await fetch(`/api/movilizadores?fecha=${todayLocal}`);
       if (!r.ok) throw new Error('Network response was not ok');
       const d = await r.json();
       if (d.config && d.config.length > 0) {
@@ -273,6 +274,8 @@ export default function Movilizadores() {
   const registrarTrip = async () => {
     if (!tripVeh || !tripMov) return;
     
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+    
     const payload = {
       movilizador_name: tripMov,
       vin: tripVeh.vin,
@@ -285,6 +288,7 @@ export default function Movilizadores() {
       dias_atraso: tripVeh.dias_atraso,
       panos_total: tripVeh.panos_total,
       tipo: tripVeh.tipo,
+      fecha: todayLocal,
     };
 
     try {
