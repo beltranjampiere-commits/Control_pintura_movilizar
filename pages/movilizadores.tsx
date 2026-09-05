@@ -58,7 +58,20 @@ const ROL_ICONS  = { fijo: '🏠', buscador: '🔍', ausente: '❌' };
 
 function fmtHora(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(iso);
+  const timeStr = d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const targetDate = new Date(d);
+  targetDate.setHours(0, 0, 0, 0);
+  
+  const diffTime = today.getTime() - targetDate.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return timeStr;
+  if (diffDays === 1) return `Ayer, ${timeStr}`;
+  return `Hace ${diffDays}d, ${timeStr}`;
 }
 function fmtFecha(iso: string | null): string {
   if (!iso) return 'Sin fecha';
@@ -84,6 +97,8 @@ export default function Movilizadores() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [waSecret, setWaSecret]     = useState('');
   const [showSecretInput, setShowSecretInput] = useState(false);
+  const [isOnline, setIsOnline]     = useState(true);
+  const [offlineActions, setOfflineActions] = useState<any[]>([]);
 
   // Modales
   const [showTripModal, setShowTripModal] = useState(false);
@@ -102,16 +117,74 @@ export default function Movilizadores() {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
   };
 
+  // ── Sincronizar Cola Offline ──────────────────────────────────────────
+  const syncOfflineActions = useCallback(async () => {
+    const queueStr = localStorage.getItem('control_pintura_offline_actions');
+    if (!queueStr) return;
+    try {
+      const queue = JSON.parse(queueStr);
+      if (!Array.isArray(queue) || queue.length === 0) return;
+      
+      addToast('info', `Sincronizando ${queue.length} acciones guardadas...`);
+      let successCount = 0;
+      
+      for (const action of queue) {
+        try {
+          if (action.type === 'TRAER_CARRO') {
+            await fetch('/api/trips', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(action.payload),
+            });
+            successCount++;
+          } else if (action.type === 'ASIGNAR_PINTOR') {
+            await fetch('/api/trips', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(action.payload),
+            });
+            successCount++;
+          }
+        } catch (e) {
+          console.error('Error sincronizando accion', action, e);
+        }
+      }
+      
+      localStorage.removeItem('control_pintura_offline_actions');
+      setOfflineActions([]);
+      if (successCount > 0) {
+        addToast('success', `✅ Se sincronizaron ${successCount} acciones.`);
+        cargarTodo();
+        cargarCola();
+      }
+    } catch (e) {
+      console.error('Error parsing offline actions', e);
+    }
+  }, []);
+
   // ── Cargar datos ────────────────────────────────────────────────────
   const cargarTodo = useCallback(async () => {
     setLoading(true);
     try {
-      // Config del día
       const r = await fetch('/api/movilizadores');
+      if (!r.ok) throw new Error('Network response was not ok');
       const d = await r.json();
-      if (d.config && d.config.length > 0) setConfig(d.config);
-      if (d.trips) setTrips(d.trips);
-    } catch { addToast('error', 'Error cargando configuración'); }
+      if (d.config && d.config.length > 0) {
+        setConfig(d.config);
+        localStorage.setItem('control_pintura_config', JSON.stringify(d.config));
+      }
+      if (d.trips) {
+        setTrips(d.trips);
+        localStorage.setItem('control_pintura_trips', JSON.stringify(d.trips));
+      }
+    } catch (e) { 
+      // Offline fallback
+      const cachedConfig = localStorage.getItem('control_pintura_config');
+      const cachedTrips = localStorage.getItem('control_pintura_trips');
+      if (cachedConfig) setConfig(JSON.parse(cachedConfig));
+      if (cachedTrips) setTrips(JSON.parse(cachedTrips));
+      addToast('info', 'Usando datos guardados (sin conexión)'); 
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -119,20 +192,49 @@ export default function Movilizadores() {
     setLoadingCola(true);
     try {
       const r = await fetch('/api/seguimiento');
+      if (!r.ok) throw new Error('Network response was not ok');
       const d = await r.json();
-      if (d.error_debug) {
-        addToast('error', d.error_debug);
-      }
+      if (d.error_debug) addToast('error', d.error_debug);
       setCola(d.vehiculos || []);
       setDistrib(d.distribucion || {});
-    } catch { addToast('error', 'Error cargando cola de seguimiento'); }
+      localStorage.setItem('control_pintura_cola', JSON.stringify(d.vehiculos || []));
+      localStorage.setItem('control_pintura_distribucion', JSON.stringify(d.distribucion || {}));
+    } catch (e) { 
+      // Offline fallback
+      const cachedCola = localStorage.getItem('control_pintura_cola');
+      const cachedDistrib = localStorage.getItem('control_pintura_distribucion');
+      if (cachedCola) setCola(JSON.parse(cachedCola));
+      if (cachedDistrib) setDistrib(JSON.parse(cachedDistrib));
+      addToast('info', 'Usando cola guardada (sin conexión)'); 
+    }
     finally { setLoadingCola(false); }
   }, []);
 
   useEffect(() => {
     cargarTodo();
     cargarCola();
-  }, [cargarTodo, cargarCola]);
+
+    // Cargar acciones pendientes iniciales
+    const queueStr = localStorage.getItem('control_pintura_offline_actions');
+    if (queueStr) {
+      try { setOfflineActions(JSON.parse(queueStr)); } catch (e) {}
+    }
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineActions();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [cargarTodo, cargarCola, syncOfflineActions]);
 
   // ── Guardar configuración de roles ──────────────────────────────────
   const guardarConfig = async () => {
@@ -170,51 +272,85 @@ export default function Movilizadores() {
   // ── Registrar trip (movilizador sale a buscar carro) ────────────────
   const registrarTrip = async () => {
     if (!tripVeh || !tripMov) return;
+    
+    const payload = {
+      movilizador_name: tripMov,
+      vin: tripVeh.vin,
+      marca: tripVeh.marca,
+      modelo: tripVeh.modelo,
+      color: tripVeh.color,
+      concesionario: tripVeh.concesionario,
+      ubicacion_gps: tripVeh.ubicacion_gps,
+      fecha_planificacion: tripVeh.fecha_planificacion,
+      dias_atraso: tripVeh.dias_atraso,
+      panos_total: tripVeh.panos_total,
+      tipo: tripVeh.tipo,
+    };
+
     try {
-      await fetch('/api/trips', {
+      if (!isOnline) throw new Error('Offline');
+      const r = await fetch('/api/trips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          movilizador_name: tripMov,
-          vin: tripVeh.vin,
-          marca: tripVeh.marca,
-          modelo: tripVeh.modelo,
-          color: tripVeh.color,
-          concesionario: tripVeh.concesionario,
-          ubicacion_gps: tripVeh.ubicacion_gps,
-          fecha_planificacion: tripVeh.fecha_planificacion,
-          dias_atraso: tripVeh.dias_atraso,
-          panos_total: tripVeh.panos_total,
-          tipo: tripVeh.tipo,
-        }),
+        body: JSON.stringify(payload),
       });
+      if (!r.ok) throw new Error('Fetch failed');
       addToast('success', `Trip registrado: ${tripVeh.vin} ✅`);
+    } catch { 
+      const action = { type: 'TRAER_CARRO', payload, timestamp: Date.now() };
+      const newQueue = [...offlineActions, action];
+      setOfflineActions(newQueue);
+      localStorage.setItem('control_pintura_offline_actions', JSON.stringify(newQueue));
+      addToast('info', `Guardado sin conexión: ${tripVeh.vin} ⏳`);
+      // Update UI optimistically
+      const optimisticTrip = { ...payload, id: Date.now(), fecha: new Date().toISOString().split('T')[0], hora_recojo: new Date().toISOString(), created_at: new Date().toISOString() };
+      setTrips(prev => [...prev, optimisticTrip as Trip]);
+      setCola(prev => prev.filter(v => v.vin !== tripVeh.vin));
+    } finally {
       setShowTripModal(false);
       setTripVeh(null);
-      await cargarTodo();
-      await cargarCola();
-    } catch { addToast('error', 'Error registrando trip'); }
+      if (isOnline) {
+        await cargarTodo();
+        await cargarCola();
+      }
+    }
   };
 
   // ── Asignar pintor ──────────────────────────────────────────────────
   const asignarPintor = async () => {
     if (!pintorTripId || !pintorSeleccionado) return;
+    
+    const payload = {
+      id: pintorTripId,
+      pintor_asignado: pintorSeleccionado,
+      notas: pintorNota,
+    };
+
     try {
-      await fetch('/api/trips', {
+      if (!isOnline) throw new Error('Offline');
+      const r = await fetch('/api/trips', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: pintorTripId,
-          pintor_asignado: pintorSeleccionado,
-          notas: pintorNota,
-        }),
+        body: JSON.stringify(payload),
       });
+      if (!r.ok) throw new Error('Fetch failed');
       addToast('success', `Asignado a ${pintorSeleccionado} ✅`);
+    } catch { 
+      const action = { type: 'ASIGNAR_PINTOR', payload, timestamp: Date.now() };
+      const newQueue = [...offlineActions, action];
+      setOfflineActions(newQueue);
+      localStorage.setItem('control_pintura_offline_actions', JSON.stringify(newQueue));
+      addToast('info', `Guardado sin conexión (Pintor) ⏳`);
+      // Update UI optimistically
+      setTrips(prev => prev.map(t => t.id === pintorTripId ? { ...t, pintor_asignado: pintorSeleccionado, notas: pintorNota, hora_entrega: new Date().toISOString() } : t));
+    } finally {
       setShowPintorModal(false);
       setPintorSeleccionado('');
       setPintorNota('');
-      await cargarTodo();
-    } catch { addToast('error', 'Error asignando pintor'); }
+      if (isOnline) {
+        await cargarTodo();
+      }
+    }
   };
 
   // ── Enviar WhatsApp ─────────────────────────────────────────────────
@@ -278,6 +414,28 @@ export default function Movilizadores() {
           </button>
         </nav>
       </header>
+
+      {/* OFFLINE BANNER */}
+      {(!isOnline || offlineActions.length > 0) && (
+        <div style={{
+          background: isOnline ? '#3b82f6' : '#ef4444',
+          color: 'white',
+          padding: '10px 20px',
+          textAlign: 'center',
+          fontWeight: 600,
+          fontSize: '0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px'
+        }}>
+          {isOnline ? (
+            <>🔄 Sincronizando {offlineActions.length} acciones guardadas...</>
+          ) : (
+            <>⚠️ Trabajando sin conexión ({offlineActions.length} acciones pendientes). Se guardarán al reconectar.</>
+          )}
+        </div>
+      )}
 
       <main style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 20px' }}>
 
@@ -476,11 +634,11 @@ export default function Movilizadores() {
                       </div>
                     </div>
 
-                    {/* Trips registrados hoy */}
+                    {/* Trips en zona */}
                     {tripsHoy.length > 0 && (
                       <div style={{ marginBottom: '0.75rem' }}>
                         <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Registrados hoy
+                          En zona
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                           {tripsHoy.map(trip => (
