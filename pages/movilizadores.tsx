@@ -307,7 +307,7 @@ export default function Movilizadores() {
       localStorage.setItem('control_pintura_offline_actions', JSON.stringify(newQueue));
       addToast('info', `Guardado sin conexión: ${tripVeh.vin} ⏳`);
       // Update UI optimistically
-      const optimisticTrip = { ...payload, id: Date.now(), fecha: new Date().toISOString().split('T')[0], hora_recojo: new Date().toISOString(), created_at: new Date().toISOString() };
+      const optimisticTrip = { ...payload, id: String(Date.now()), fecha: new Date().toISOString().split('T')[0], hora_recojo: new Date().toISOString(), created_at: new Date().toISOString(), pintor_asignado: null, hora_entrega: null, alerta_enviada: false, notas: '' };
       setTrips(prev => [...prev, optimisticTrip as Trip]);
       setCola(prev => prev.filter(v => v.vin !== tripVeh.vin));
     } finally {
