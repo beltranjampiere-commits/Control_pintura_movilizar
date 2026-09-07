@@ -38,11 +38,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Obtener trips del día
+    // Obtener trips activos en zona
     const { data: trips } = await supabase
       .from('movilizador_trips')
       .select('*')
-      .eq('fecha', fecha)
+      .eq('estado', 'en_zona')
       .order('created_at', { ascending: true });
 
     return res.status(200).json({ fecha, config, trips: trips || [], sinConfig: false });

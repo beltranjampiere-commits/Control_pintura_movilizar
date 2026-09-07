@@ -241,11 +241,12 @@ export default function Movilizadores() {
   // ── Guardar configuración de roles ──────────────────────────────────
   const guardarConfig = async () => {
     setSavingConfig(true);
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
     try {
       await fetch('/api/movilizadores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ movilizadores: config }),
+        body: JSON.stringify({ fecha: todayLocal, movilizadores: config }),
       });
       // Si hay wa_secret, guardarlo también
       if (waSecret) {
@@ -256,6 +257,7 @@ export default function Movilizadores() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              fecha: todayLocal,
               movilizadores: config.map(c => c.rol === 'fijo' ? { ...c, wa_secret: waSecret } : c),
             }),
           });

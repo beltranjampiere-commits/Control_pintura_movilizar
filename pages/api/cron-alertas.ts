@@ -73,11 +73,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const resultados: any[] = [];
 
   for (const buscador of config) {
-    // 2. Obtener trips de hoy del movilizador
+    // 2. Obtener trips activos del movilizador
     const { data: trips } = await supabase
       .from('movilizador_trips')
       .select('*')
-      .eq('fecha', today)
+      .eq('estado', 'en_zona')
       .eq('movilizador_name', buscador.movilizador_name);
 
     const entregados = (trips || []).filter(t => t.pintor_asignado && t.pintor_asignado.trim() !== '').length;

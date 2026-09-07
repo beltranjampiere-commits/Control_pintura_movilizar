@@ -98,11 +98,29 @@ export async function obtenerColaYDistribucion(today: string) {
     return vin.length > 5 && eliminado !== 'si' && eliminado !== 'sí' && eliminado !== '1' && eliminado !== 'true';
   });
 
-  const { data: tripsHoy } = await supabase
+  const vinsValidosSet = new Set(validos.map(v => v[COL.VIN] || ''));
+
+  // Obtener TODOS los trips que sigan activos en zona
+  const { data: tripsActivos } = await supabase
     .from('movilizador_trips')
-    .select('vin')
-    .eq('fecha', today);
-  const vinsEnTrip = new Set((tripsHoy || []).map((t: any) => t.vin));
+    .select('id, vin')
+    .eq('estado', 'en_zona');
+
+  const tripsActivosArr = tripsActivos || [];
+
+  // Auto-completado: Si un trip está 'en_zona' pero su VIN ya no está en la hoja (validos), marcar como completado
+  const tripsParaCompletar = tripsActivosArr.filter(t => !vinsValidosSet.has(t.vin));
+  
+  if (tripsParaCompletar.length > 0) {
+    const idsToComplete = tripsParaCompletar.map(t => t.id);
+    await supabase
+      .from('movilizador_trips')
+      .update({ estado: 'completado', updated_at: new Date().toISOString() })
+      .in('id', idsToComplete);
+  }
+
+  // Filtrar los trips que siguen reales
+  const vinsEnTrip = new Set(tripsActivosArr.filter(t => vinsValidosSet.has(t.vin)).map(t => t.vin));
 
   const vehiculos = validos
     .filter(row => !vinsEnTrip.has(row[COL.VIN]))
@@ -134,9 +152,14 @@ export async function obtenerColaYDistribucion(today: string) {
   const { data: config } = await supabase
     .from('movilizador_config')
     .select('movilizador_name, rol')
-    .eq('fecha', today)
-    .eq('rol', 'buscador');
-  const buscadores = (config || []).map((c: any) => c.movilizador_name);
+    .eq('fecha', today);
+
+  let buscadores: string[] = [];
+  if (!config || config.length === 0) {
+    buscadores = ['Paul', 'Santos', 'Marcos'];
+  } else {
+    buscadores = config.filter((c: any) => c.rol === 'buscador').map((c: any) => c.movilizador_name);
+  }
 
   const distribucion = distribuirBalanceado(vehiculos, buscadores);
 

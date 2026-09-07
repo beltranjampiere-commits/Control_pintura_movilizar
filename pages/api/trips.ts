@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let query = supabase
       .from('movilizador_trips')
       .select('*')
-      .eq('fecha', (fecha as string) || today)
+      .eq('estado', 'en_zona')
       .order('created_at', { ascending: true });
 
     if (movilizador) query = query.eq('movilizador_name', movilizador as string);
@@ -27,6 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('movilizador_trips')
       .insert({
         ...body,
+        estado: 'en_zona',
         fecha: body.fecha || today,
         hora_recojo: body.hora_recojo || new Date().toISOString(),
         created_at: new Date().toISOString(),

@@ -15,11 +15,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const today = fecha || new Date().toISOString().split('T')[0];
 
-  // Obtener trips de hoy del movilizador para saber entregados vs pendientes de asignar
+  // Obtener trips activos del movilizador para saber entregados vs pendientes de asignar
   const { data: trips, error } = await supabase
     .from('movilizador_trips')
     .select('*')
-    .eq('fecha', today)
+    .eq('estado', 'en_zona')
     .eq('movilizador_name', movilizador_name);
 
   if (error) return res.status(500).json({ error: error.message });
